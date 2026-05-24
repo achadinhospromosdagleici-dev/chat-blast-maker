@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { invalidateCache } from "@/lib/app-config";
 
 async function assertAdmin(userSupabase: any, userId: string) {
   const { data, error } = await userSupabase.rpc("has_role", {
@@ -166,6 +167,37 @@ export const deletePlano = createServerFn({ method: "POST" })
       .delete()
       .eq("id", data.id);
     if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const getWuzapiToken = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin((context as any).supabase, (context as any).userId);
+    const { data } = await supabaseAdmin
+      .from("app_config")
+      .select("value")
+      .eq("key", "wuzapi_admin_token")
+      .single();
+    const envToken = process.env.WUZAPI_ADMIN_TOKEN;
+    return {
+      token: data?.value || "",
+      fromEnv: !data?.value && !!envToken,
+    };
+  });
+
+export const setWuzapiToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ token: z.string() }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    await assertAdmin((context as any).supabase, (context as any).userId);
+    const { error } = await supabaseAdmin
+      .from("app_config")
+      .upsert({ key: "wuzapi_admin_token", value: data.token }, { onConflict: "key" });
+    if (error) throw new Error(error.message);
+    invalidateCache();
     return { ok: true };
   });
 

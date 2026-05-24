@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getConfig } from "@/lib/app-config";
 
 const BASE_URL = "https://wuzapi.cellchat.store";
 
@@ -9,7 +10,10 @@ async function wuz(
   opts: { method?: string; token?: string; body?: unknown; admin?: boolean } = {},
 ): Promise<{ code?: number; success?: boolean; data?: unknown }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (opts.admin) headers["Authorization"] = process.env.WUZAPI_ADMIN_TOKEN!;
+  if (opts.admin) {
+    const dbToken = await getConfig("wuzapi_admin_token");
+    headers["Authorization"] = dbToken || process.env.WUZAPI_ADMIN_TOKEN!;
+  }
   if (opts.token) headers["token"] = opts.token;
 
   const res = await fetch(`${BASE_URL}${path}`, {

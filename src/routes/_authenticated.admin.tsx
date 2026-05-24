@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, ShieldCheck, ShieldOff } from "lucide-react";
+import { Loader2, Plus, Trash2, ShieldCheck, ShieldOff, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   checkIsAdmin,
@@ -44,6 +44,8 @@ import {
   upsertPlano,
   deletePlano,
   deleteUsuario,
+  getWuzapiToken,
+  setWuzapiToken,
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -94,18 +96,22 @@ function AdminPage() {
             Gerencie usuários, planos e permissões do sistema.
           </p>
         </div>
-        <Tabs defaultValue="usuarios">
-          <TabsList>
-            <TabsTrigger value="usuarios">Usuários</TabsTrigger>
-            <TabsTrigger value="planos">Planos</TabsTrigger>
-          </TabsList>
-          <TabsContent value="usuarios" className="mt-4">
-            <UsuariosTab />
-          </TabsContent>
-          <TabsContent value="planos" className="mt-4">
-            <PlanosTab />
-          </TabsContent>
-        </Tabs>
+          <Tabs defaultValue="usuarios">
+            <TabsList>
+              <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+              <TabsTrigger value="planos">Planos</TabsTrigger>
+              <TabsTrigger value="config">Configurações</TabsTrigger>
+            </TabsList>
+            <TabsContent value="usuarios" className="mt-4">
+              <UsuariosTab />
+            </TabsContent>
+            <TabsContent value="planos" className="mt-4">
+              <PlanosTab />
+            </TabsContent>
+            <TabsContent value="config" className="mt-4">
+              <ConfigTab />
+            </TabsContent>
+          </Tabs>
       </div>
     </AppShell>
   );
@@ -281,6 +287,69 @@ function UsuariosTab() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ConfigTab() {
+  const getFn = useServerFn(getWuzapiToken);
+  const setFn = useServerFn(setWuzapiToken);
+  const qc = useQueryClient();
+
+  const { data } = useQuery({
+    queryKey: ["admin", "wuzapi-token"],
+    queryFn: () => getFn({}),
+  });
+
+  const [token, setToken] = useState("");
+
+  useEffect(() => {
+    if (data) setToken(data.token);
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: () => setFn({ data: { token } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "wuzapi-token"] });
+      toast.success("Token WuzAPI atualizado");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Configurações do Sistema</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Field label="Token Admin WuzAPI">
+          <Input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="Token de administrador da WuzAPI"
+          />
+          {data?.fromEnv && (
+            <p className="mt-1 text-xs text-amber-500">
+              Usando token da variável de ambiente. Salve um token no banco para substituí-lo.
+            </p>
+          )}
+        </Field>
+        <Button onClick={() => save.mutate()} disabled={save.isPending} className="gap-2">
+          {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          <Save className="h-4 w-4" /> Salvar Token
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <div>
+      <Label className="mb-1 block text-sm font-medium">{label}</Label>
+      {children}
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    </div>
   );
 }
 
